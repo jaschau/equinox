@@ -160,7 +160,41 @@ def test_multi_vmap():
         get_state_bad(b)
 
 
-def test_inference():
+def test_inference_set_state():
     index = eqx.experimental.StateIndex(inference=True)
     with pytest.raises(RuntimeError):
         eqx.experimental.set_state(index, jnp.array(1))
+
+
+@pytest.mark.skip
+def test_inference_not_set_under_jit():
+    index = eqx.experimental.StateIndex()
+
+    @jax.jit
+    def f(i):
+        eqx.tree_at(lambda j: j.inference, i, True)
+
+    with pytest.raises(ValueError):
+        f(index)
+
+
+def test_inference_can_set():
+    index = eqx.experimental.StateIndex()
+    eqx.tree_at(lambda i: i.inference, index, True)
+
+
+def test_inference_inlined():
+    index = eqx.experimental.StateIndex()
+    eqx.experimental.set_state(index, jnp.array(1))
+
+    @eqx.filter_jit
+    def f(i):
+        x = eqx.experimental.get_state(i, jnp.array(0))
+        return x + 1
+
+    index_inference = eqx.tree_at(lambda i: i.inference, index, True)
+    out = f(index_inference)
+    assert jnp.array_equal(out, jnp.array(2))
+    eqx.experimental.set_state(index, jnp.array(2))
+    out = f(index_inference)
+    assert jnp.array_equal(out, jnp.array(3))
